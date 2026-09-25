@@ -16,6 +16,18 @@ if (!string.IsNullOrEmpty(port))
 // [ส่วนที่ 1.3] ตั้งค่าระบบส่วนกลาง (Service Registration)
 // ---------------------------------------------------------------------------
 
+// 0) รองรับ reverse proxy ของ Render — อ่าน X-Forwarded-Proto/For
+//    เพื่อให้ Request.Scheme เป็น https (จำเป็นสำหรับ QR และ GPS)
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor |
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    // ล้างค่า default เพื่อรับจาก proxy ของ Render ได้ (ไม่รู้ IP ล่วงหน้า)
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // 1) เปิดใช้งาน MVC (Controllers + Views)
 builder.Services.AddControllersWithViews();
 
@@ -59,6 +71,10 @@ using (var scope = app.Services.CreateScope())
 // ---------------------------------------------------------------------------
 // HTTP Request Pipeline
 // ---------------------------------------------------------------------------
+
+// ต้องมาก่อนสุด: ให้แอปเชื่อ header จาก proxy (https จริงของ Render)
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
