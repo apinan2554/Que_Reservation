@@ -1,0 +1,162 @@
+@{
+    ViewData["Title"] = "จองคิว";
+    Layout = "_Layout";
+}
+
+<!-- [ส่วนที่ 2.2] หน้าลงทะเบียนรับคิว (Register UI) ธีมกระจกใส -->
+<style>
+    .register-wrapper {
+        min-height: calc(100vh - 160px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 12px;
+    }
+    .register-card { width: 100%; max-width: 440px; }
+    .register-logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: rgba(255,255,255,.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        margin-bottom: 18px;
+    }
+    .register-card h3 { font-weight: 800; font-size: 1.9rem; margin-bottom: 4px; }
+    .register-sub { color: #94a3b8; margin-bottom: 24px; }
+    .field-label { font-weight: 600; margin-bottom: 6px; display: block; }
+    .btn-pin { width: 100%; }
+</style>
+
+<div class="register-wrapper">
+    <div class="register-card glass-card">
+        <div class="register-logo">🍜</div>
+        <h3 class="glass-title">ยินดีต้อนรับ</h3>
+        <p class="register-sub">กรอกข้อมูลเพื่อรับหมายเลขคิว</p>
+
+        <!-- [ข] แจ้งเวลานั่งสูงสุดต่อโต๊ะให้ลูกค้าทราบ -->
+        <div id="timeLimitBox" class="alert alert-info py-2 small mb-3 rounded-4 d-none">
+            ⏰ <span id="timeLimitText"></span>
+        </div>
+
+        <form id="queueForm">
+            <div class="mb-3">
+                <label class="field-label">ชื่อผู้จอง</label>
+                <input type="text" class="form-control" id="customerName" required
+                       placeholder="เช่น สมชาย" />
+            </div>
+            <div class="mb-3">
+                <label class="field-label">จำนวนคน</label>
+                <input type="number" class="form-control" id="customerCount"
+                       min="1" max="50" value="1" required />
+                <div class="form-text">กลุ่มโต๊ะ: A = 1-2 คน, B = 3-4 คน, C = 5+ คน</div>
+            </div>
+
+            <div id="geoStatus" class="alert alert-secondary py-2 small mb-3 rounded-4 d-none">
+                📍 กำลังตรวจสอบตำแหน่ง...
+            </div>
+
+            <button type="submit" class="btn-float btn-float-primary btn-pin" id="submitBtn">
+                รับคิว
+            </button>
+        </form>
+
+        <div id="errorBox" class="alert alert-danger mt-3 d-none rounded-4"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentPosition = null;
+
+        // --- [ข] ดึงค่าตั้งเวลาต่อโต๊ะมาแสดงให้ลูกค้าทราบ ---
+        (async () => {
+            try {
+                const res = await fetch('@Url.Action("GetTableSettings", "Settings")');
+                const settings = await res.json();
+                if (!settings.length) return;
+
+                // แปลงนาทีเป็นข้อความ ชม./นาที เช่น 90 → "1 ชม. 30 นาที"
+                const fmt = (m) => {
+                    const h = Math.floor(m / 60), min = m % 60;
+                    return (h ? h + ' ชม. ' : '') + (min ? min + ' นาที' : '') || '0 นาที';
+                };
+
+                const parts = settings.map(s => `กลุ่ม ${s.tableGroup} (${s.description}) ไม่เกิน ${fmt(s.maxMinutes)}`);
+                document.getElementById('timeLimitText').innerHTML =
+                    'จำกัดเวลานั่งต่อโต๊ะ<br>' + parts.join('<br>');
+                document.getElementById('timeLimitBox').classList.remove('d-none');
+            } catch { /* ไม่แสดงถ้าดึงค่าไม่ได้ */ }
+        })();
+
+        // มาจาก QR หรือไม่ (กำหนดจาก server ผ่าน ViewBag.RequireGps)
+        const fromQr = @(ViewBag.RequireGps == true ? "true" : "false");
+
+        // --- [ส่วนที่ 2.3 - Frontend] ขอพิกัด GPS เฉพาะเมื่อมาจาก QR ---
+        const geoStatus = document.getElementById('geoStatus');
+        if (fromQr) {
+            geoStatus.classList.remove('d-none');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        currentPosition = {
+                            latitude: pos.coords.latitude,
+                            longitude: pos.coords.longitude
+                        };
+                        geoStatus.className = 'alert alert-success py-2 small mb-3 rounded-4';
+                        geoStatus.textContent = '✅ ตรวจสอบตำแหน่งเรียบร้อย';
+                    },
+                    (err) => {
+                        geoStatus.className = 'alert alert-warning py-2 small mb-3 rounded-4';
+                        geoStatus.textContent = '⚠️ ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตการใช้ GPS';
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            } else {
+                geoStatus.classList.remove('d-none');
+                geoStatus.textContent = '❌ เบราว์เซอร์ไม่รองรับ GPS';
+            }
+        }
+
+        // --- ส่งฟอร์มรับคิว ---
+        document.getElementById('queueForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const errorBox = document.getElementById('errorBox');
+            errorBox.classList.add('d-none');
+            btn.disabled = true;
+            btn.textContent = 'กำลังส่ง...';
+
+            const payload = {
+                customerName: document.getElementById('customerName').value,
+                customerCount: parseInt(document.getElementById('customerCount').value, 10),
+                latitude: currentPosition?.latitude ?? null,
+                longitude: currentPosition?.longitude ?? null,
+                fromQr: fromQr
+            };
+
+            try {
+                const res = await fetch('@Url.Action("Register", "Customer")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.message || 'เกิดข้อผิดพลาด');
+                }
+
+                // ไปหน้าติดตามสถานะคิว (real-time)
+                window.location.href = '@Url.Action("Status", "Customer")/' + data.id;
+            } catch (ex) {
+                errorBox.textContent = ex.message;
+                errorBox.classList.remove('d-none');
+                btn.disabled = false;
+                btn.textContent = 'รับคิว';
+            }
+        });
+    </script>
+}

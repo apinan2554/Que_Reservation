@@ -1,0 +1,21 @@
+# .NET build output
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider
+.idea/
+
+# SQLite database (สร้างใหม่อัตโนมัติตอนรัน)
+queue.db
+queue.db-shm
+queue.db-wal
+
+# OS
+.DS_Store
+Thumbs.db

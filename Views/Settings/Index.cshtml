@@ -1,0 +1,86 @@
+@model List<Reservation_Que.Models.TableSetting>
+@{
+    ViewData["Title"] = "ตั้งค่าเวลาต่อโต๊ะ";
+    Layout = "_Layout";
+}
+
+<!-- [ก] หน้าตั้งค่าเวลานั่งสูงสุดต่อกลุ่มโต๊ะ (สำหรับร้าน/พนักงาน) -->
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="glass-card mt-4">
+            <div>
+                <h3 class="glass-title mb-1">⚙️ ตั้งค่าเวลาต่อโต๊ะ</h3>
+                <p class="text-muted small mb-4">
+                    กำหนดเวลานั่งสูงสุดของแต่ละกลุ่มโต๊ะ (หน่วยเป็นนาที) เช่น 90 นาที = 1.30 ชั่วโมง
+                </p>
+
+                <form id="settingsForm">
+                    @foreach (var s in Model)
+                    {
+                        <div class="row align-items-center mb-3">
+                            <div class="col-4">
+                                <strong>กลุ่ม @s.TableGroup</strong>
+                                <div class="text-muted small">@s.Description</div>
+                            </div>
+                            <div class="col-8">
+                                <div class="input-group">
+                                    <input type="number" class="form-control setting-input"
+                                           data-group="@s.TableGroup"
+                                           value="@s.MaxMinutes" min="1" max="1440" required />
+                                    <span class="input-group-text">นาที</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <button type="submit" class="btn-float btn-float-primary w-100 mt-2" id="saveBtn">
+                        💾 บันทึก
+                    </button>
+                </form>
+
+                <div id="msgBox" class="alert mt-3 d-none"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('saveBtn');
+            const msgBox = document.getElementById('msgBox');
+            msgBox.classList.add('d-none');
+
+            // รวบรวมค่าจากทุกกลุ่มโต๊ะ
+            const items = [...document.querySelectorAll('.setting-input')].map(el => ({
+                tableGroup: el.dataset.group,
+                maxMinutes: parseInt(el.value, 10)
+            }));
+
+            btn.disabled = true;
+            btn.textContent = 'กำลังบันทึก...';
+
+            try {
+                const res = await fetch('@Url.Action("UpdateMaxMinutes", "Settings")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(items)
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'บันทึกไม่สำเร็จ');
+
+                msgBox.className = 'alert alert-success mt-3';
+                msgBox.textContent = '✅ ' + data.message;
+                msgBox.classList.remove('d-none');
+            } catch (ex) {
+                msgBox.className = 'alert alert-danger mt-3';
+                msgBox.textContent = ex.message;
+                msgBox.classList.remove('d-none');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '💾 บันทึก';
+            }
+        });
+    </script>
+}

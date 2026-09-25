@@ -1,0 +1,97 @@
+@model int
+@{
+    ViewData["Title"] = "ตั๋วคิว";
+    Layout = "_Layout";
+    int queueId = Model;
+}
+
+<!-- [ส่วนที่ 5.1] หน้าตั๋วคิว + พิมพ์สลิปความร้อน -->
+<style>
+    /* สไตล์บนหน้าจอปกติ (การ์ดขาวเพื่อความคมของสลิป) */
+    .ticket {
+        max-width: 320px;
+        margin: 30px auto;
+        background: #fff;
+        color: #1e293b;
+        border-radius: 16px;
+        border: 1px dashed #94a3b8;
+        padding: 24px;
+        text-align: center;
+        font-family: 'Courier New', monospace;
+        box-shadow: 0 12px 30px rgba(0,0,0,.35), 0 0 18px rgba(56,189,248,.3);
+    }
+    .ticket .qnum { font-size: 3rem; font-weight: 800; margin: 8px 0; }
+    .ticket-qr { width: 150px; height: 150px; }
+    .no-print { text-align: center; margin-top: 16px; }
+
+    /* --- [ส่วนที่ 5.1] @@media print: สลิปความร้อน 58/80mm --- */
+    @@media print {
+        /* ซ่อนทุกอย่างที่ไม่ใช่สลิป */
+        body * { visibility: hidden; }
+        .ticket, .ticket * { visibility: visible; }
+        .no-print, header, footer, nav { display: none !important; }
+
+        .ticket {
+            position: absolute;
+            top: 0; left: 0;
+            width: 80mm;      /* รองรับ 80mm; เปลี่ยนเป็น 58mm สำหรับเครื่องเล็ก */
+            max-width: 80mm;
+            margin: 0;
+            border: none;
+            padding: 4mm;
+        }
+        .qnum { font-size: 28pt; }
+    }
+</style>
+
+<div class="ticket" id="ticket">
+    <div>🍜 ร้านอาหาร</div>
+    <div>คิวของคุณ</div>
+    <div class="qnum" id="tQueueNumber">...</div>
+    <hr />
+    <div>ชื่อ: <span id="tName"></span></div>
+    <div>จำนวน: <span id="tCount"></span> คน</div>
+    <div>กลุ่มโต๊ะ: <span id="tGroup"></span></div>
+    <div id="tTime" class="mt-2 small"></div>
+    <hr />
+    <!-- QR ผูกกับคิวนี้ สแกนเพื่อกลับมาดูสถานะได้ตลอด -->
+    <img id="tQr" class="ticket-qr" alt="QR ติดตามคิว" />
+    <div class="small mt-1">สแกนเพื่อติดตามสถานะคิวของคุณ</div>
+    <hr />
+    <div class="small">กรุณารอเรียกคิวที่หน้าจอ</div>
+</div>
+
+<div class="no-print">
+    <button class="btn-float btn-float-primary" onclick="window.print()">🖨️ พิมพ์ตั๋วอีกครั้ง</button>
+    <a class="btn btn-link text-info" asp-controller="Customer" asp-action="Register">รับคิวใหม่</a>
+</div>
+
+@section Scripts {
+    <script>
+        const queueId = @queueId;
+
+        // URL หน้าติดตามสถานะคิวนี้ (absolute) สร้างจาก server ตาม host ปัจจุบัน
+        const statusUrl = '@Html.Raw(Url.Action("Status", "Customer", new { id = queueId }, Context.Request.Scheme))';
+        // ชี้ img ไปที่ QrController.Image เพื่อเจน QR ของ statusUrl
+        document.getElementById('tQr').src =
+            '@Url.Action("Image", "Qr")?url=' + encodeURIComponent(statusUrl);
+
+        // ดึงข้อมูลคิวจาก API แล้วเติมลงตั๋ว จากนั้นสั่งพิมพ์อัตโนมัติ
+        (async () => {
+            const res = await fetch('@Url.Action("GetQueues", "Staff")');
+            const all = await res.json();
+            const q = all.find(x => x.id === queueId);
+            if (!q) return;
+
+            document.getElementById('tQueueNumber').textContent = q.queueNumber;
+            document.getElementById('tName').textContent = q.customerName;
+            document.getElementById('tCount').textContent = q.customerCount;
+            document.getElementById('tGroup').textContent = q.tableGroup;
+            document.getElementById('tTime').textContent =
+                new Date(q.createdAt).toLocaleString('th-TH');
+
+            // [ส่วนที่ 5.1] พิมพ์อัตโนมัติเมื่อทำรายการเสร็จ (รอ QR โหลดก่อน)
+            setTimeout(() => window.print(), 900);
+        })();
+    </script>
+}

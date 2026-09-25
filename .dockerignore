@@ -1,0 +1,13 @@
+bin/
+obj/
+out/
+.vs/
+.idea/
+.git/
+.gitignore
+*.user
+queue.db
+queue.db-shm
+queue.db-wal
+Tests/
+README.md

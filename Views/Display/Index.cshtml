@@ -1,0 +1,146 @@
+@{
+    ViewData["Title"] = "Queue Display";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>เรียกคิว - หน้าร้าน</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        body {
+            /* ธีมฟ้าอมเขียวเรืองแสง ให้ตรงกับหน้าอื่น */
+            background:
+                radial-gradient(circle at 20% 20%, rgba(56,189,248,.22), transparent 42%),
+                radial-gradient(circle at 80% 30%, rgba(45,212,191,.18), transparent 45%),
+                radial-gradient(circle at 50% 95%, rgba(59,130,246,.18), transparent 45%),
+                linear-gradient(135deg, #0b2537, #0f3543 60%, #0b2f3a);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+        /* กล่องคิวที่กำลังเรียก/รอ เป็นแบบกระจกใส */
+        .waiting-item {
+            background: linear-gradient(160deg, rgba(255,255,255,.9), rgba(255,255,255,.7)) !important;
+            box-shadow: 0 8px 20px rgba(0,0,0,.3), 0 0 14px rgba(56,189,248,.35);
+        }
+        .now-calling {
+            text-align: center;
+            padding-top: 4vh;
+        }
+        .now-calling .label { font-size: 2rem; color: #93c5fd; letter-spacing: 4px; }
+        .now-calling .big-number {
+            font-size: 14rem;
+            font-weight: 800;
+            line-height: 1;
+            color: #fde047;
+            text-shadow: 0 0 30px rgba(253,224,71,.5);
+            animation: pulse 1.2s infinite;
+        }
+        @@keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .waiting-strip {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,.4);
+            padding: 20px;
+        }
+        .waiting-title { font-size: 1.2rem; color: #cbd5e1; margin-bottom: 10px; }
+        .waiting-item {
+            display: inline-block;
+            background: #fff;
+            color: #1e293b;
+            font-size: 1.8rem;
+            font-weight: 700;
+            padding: 8px 20px;
+            border-radius: 10px;
+            margin: 4px;
+        }
+        .mute-btn { position: fixed; top: 16px; right: 16px; }
+    </style>
+</head>
+<body>
+    <!-- ปุ่มเปิดเสียง (ต้องมี user interaction ครั้งแรกเพื่อให้เบราว์เซอร์อนุญาตเสียง) -->
+    <button id="enableSound" class="btn btn-warning mute-btn">🔊 เปิดเสียงเรียกคิว</button>
+
+    <div class="now-calling">
+        <div class="label">กำลังเรียกคิว</div>
+        <div class="big-number" id="callingNumber">-</div>
+        <div class="fs-3 mt-2" id="callingGroup"></div>
+    </div>
+
+    <div class="waiting-strip">
+        <div class="waiting-title">คิวถัดไป</div>
+        <div id="waitingList"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        let soundEnabled = false;
+        document.getElementById('enableSound').addEventListener('click', () => {
+            soundEnabled = true;
+            // พูดเงียบๆ 1 ครั้งเพื่อปลดล็อก speechSynthesis บนบางเบราว์เซอร์
+            speak('พร้อมเรียกคิว');
+            document.getElementById('enableSound').classList.add('d-none');
+        });
+
+        // --- [ส่วนที่ 4.3] Web Speech API: พูดภาษาไทย ---
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'th-TH';
+            u.rate = 0.9;
+            window.speechSynthesis.cancel(); // ยกเลิกคิวเสียงเก่า
+            window.speechSynthesis.speak(u);
+        }
+
+        // --- [ส่วนที่ 4.2] เชื่อมต่อ SignalR และดักฟังเสียงเรียกคิว ---
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/queueHub")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("PlaySoundNotification", (queueNumber, tableType) => {
+            document.getElementById('callingNumber').textContent = queueNumber;
+            document.getElementById('callingGroup').textContent = 'กลุ่มโต๊ะ ' + tableType;
+
+            if (soundEnabled) {
+                // อ่านทีละตัวอักษร/ตัวเลขให้ชัด เช่น "เอ ศูนย์ ศูนย์ หนึ่ง"
+                const spoken = spellQueue(queueNumber);
+                speak(`ขอเชิญคิวหมายเลข ${spoken} ค่ะ`);
+            }
+        });
+
+        connection.on("ReceiveQueueUpdate", loadDisplay);
+
+        connection.start().then(loadDisplay);
+
+        // แปลงเลขคิวให้พูดชัดขึ้น เช่น A001 → "เอ ศูนย์ ศูนย์ หนึ่ง"
+        function spellQueue(qn) {
+            const map = { '0':'ศูนย์','1':'หนึ่ง','2':'สอง','3':'สาม','4':'สี่','5':'ห้า','6':'หก','7':'เจ็ด','8':'แปด','9':'เก้า' };
+            return qn.split('').map(c => map[c] ?? c).join(' ');
+        }
+
+        // --- ดึงข้อมูลแสดงผล ---
+        async function loadDisplay() {
+            const res = await fetch('@Url.Action("GetDisplayData", "Display")');
+            const data = await res.json();
+
+            if (data.calling.length > 0) {
+                const c = data.calling[0];
+                document.getElementById('callingNumber').textContent = c.queueNumber;
+                document.getElementById('callingGroup').textContent = 'กลุ่มโต๊ะ ' + c.tableGroup;
+            }
+
+            document.getElementById('waitingList').innerHTML =
+                data.waiting.map(w => `<span class="waiting-item">${w.queueNumber}</span>`).join('')
+                || '<span class="text-muted">— ไม่มีคิวรอ —</span>';
+        }
+    </script>
+</body>
+</html>

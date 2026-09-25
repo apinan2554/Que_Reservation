@@ -1,0 +1,79 @@
+﻿@{
+    ViewData["Title"] = "ระบบจองคิวออนไลน์";
+}
+
+<style>
+    .home-hero { padding: 40px 0 24px; }
+    /* การ์ดปุ่มลอย (ใช้กระจกใสให้เข้าธีม) */
+    .float-card {
+        display: block;
+        text-decoration: none;
+        border-radius: 20px;
+        padding: 28px 20px;
+        text-align: center;
+        color: #f1f5f9;
+        transition: transform .25s ease, box-shadow .25s ease;
+        height: 100%;
+    }
+    .float-card:hover {
+        transform: translateY(-8px);
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(0,0,0,.4), 0 0 26px rgba(56,189,248,.5);
+    }
+    .float-icon {
+        width: 68px;
+        height: 68px;
+        margin: 0 auto 14px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.9rem;
+        color: #fff;
+    }
+    .float-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 4px; }
+    .float-desc { font-size: .85rem; color: #94a3b8; }
+
+    .ic-customer { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .ic-staff    { background: linear-gradient(135deg, #38bdf8, #0ea5e9); }
+    .ic-display  { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+    .ic-qr       { background: linear-gradient(135deg, #64748b, #475569); }
+    .ic-settings { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .ic-staffreg { background: linear-gradient(135deg, #a855f7, #7c3aed); }
+</style>
+
+<div class="home-hero text-center">
+    <h1 class="display-5 glass-title">🍜 ระบบจองคิวออนไลน์</h1>
+    <p class="text-muted">สำหรับร้านอาหารและเครื่องดื่ม</p>
+</div>
+
+<div class="row g-4 justify-content-center">
+    <div class="col-6 col-md-3">
+        <a class="float-card glass-card" asp-controller="Customer" asp-action="Register">
+            <div class="float-icon ic-customer">📱</div>
+            <div class="float-title">หน้าจองคิว</div>
+            <div class="float-desc">สำหรับลูกค้า</div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a class="float-card glass-card" asp-controller="Staff" asp-action="Dashboard">
+            <div class="float-icon ic-staff">📋</div>
+            <div class="float-title">แดชบอร์ดพนักงาน</div>
+            <div class="float-desc">จัดการคิว</div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a class="float-card glass-card" asp-controller="Display" asp-action="Index">
+            <div class="float-icon ic-display">📺</div>
+            <div class="float-title">จอแสดงผลหน้าร้าน</div>
+            <div class="float-desc">เรียกคิว + เสียง</div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a class="float-card glass-card" asp-controller="Qr" asp-action="Index">
+            <div class="float-icon ic-qr">🔳</div>
+            <div class="float-title">QR Code หน้าร้าน</div>
+            <div class="float-desc">ให้ลูกค้าสแกน</div>
+        </a>
+    </div>
+</div>

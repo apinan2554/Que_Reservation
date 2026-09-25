@@ -1,0 +1,298 @@
+@{
+    ViewData["Title"] = "Staff Dashboard";
+    Layout = null; // ใช้เลย์เอาต์เต็มจอเอง
+}
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Staff Dashboard - จัดการคิว</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        /* [ส่วนที่ 3.1] ธีม Hi-Tech เรืองแสง (ฟ้าอมเขียว) */
+        body {
+            color: #e2e8f0;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            min-height: 100vh;
+            /* พื้นหลังไล่เฉดฟ้า-เขียวเข้ม + จุดแสงเรือง */
+            background:
+                radial-gradient(circle at 20% 20%, rgba(56,189,248,.18), transparent 40%),
+                radial-gradient(circle at 80% 30%, rgba(45,212,191,.15), transparent 45%),
+                radial-gradient(circle at 50% 90%, rgba(59,130,246,.15), transparent 45%),
+                linear-gradient(135deg, #0b2537, #0f3543 60%, #0b2f3a);
+            background-attachment: fixed;
+        }
+        .board-header {
+            background: rgba(10, 30, 45, .7);
+            backdrop-filter: blur(8px);
+            padding: 16px 24px;
+            border-bottom: 1px solid rgba(56,189,248,.35);
+            box-shadow: 0 2px 20px rgba(56,189,248,.15);
+        }
+        /* คอลัมน์แบบกระจกเรืองแสง มีกรอบไซเบอร์ */
+        .kanban-column {
+            background: rgba(13, 40, 55, .55);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(56,189,248,.35);
+            border-radius: 16px;
+            padding: 16px;
+            min-height: 70vh;
+            box-shadow: 0 0 24px rgba(56,189,248,.18), inset 0 0 30px rgba(45,212,191,.06);
+        }
+        .column-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #334155;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        /* การ์ดคิวแบบกระจกใส (glassmorphism) มีมิติแสง */
+        .queue-card {
+            position: relative;
+            /* ไล่เฉดโปร่งใส: สว่างมุมบนซ้าย จางลงมุมล่างขวา */
+            background: linear-gradient(150deg, rgba(255,255,255,.22), rgba(255,255,255,.06) 55%, rgba(255,255,255,.03));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            color: #f1f5f9;
+            border-radius: 18px;
+            padding: 18px;
+            margin-bottom: 16px;
+            /* ขอบสว่างด้านบน มืดด้านล่าง ให้ดูเป็นแก้ว */
+            border: 1px solid rgba(255,255,255,.35);
+            border-top-color: rgba(255,255,255,.6);
+            box-shadow:
+                0 10px 30px rgba(0,0,0,.35),
+                0 0 18px rgba(56,189,248,.18),
+                inset 0 1px 1px rgba(255,255,255,.4);
+            overflow: hidden;
+            transition: transform .25s ease, box-shadow .25s ease;
+        }
+        /* แถบแสงสะท้อน (reflection) โค้งด้านบนของกล่อง */
+        .queue-card::before {
+            content: "";
+            position: absolute;
+            top: -60%;
+            left: -20%;
+            width: 140%;
+            height: 120%;
+            background: radial-gradient(ellipse at top, rgba(255,255,255,.35), transparent 60%);
+            pointer-events: none;
+        }
+        /* ยกลอย + เรืองแสงเมื่อชี้เมาส์ */
+        .queue-card:hover {
+            transform: translateY(-5px);
+            box-shadow:
+                0 18px 40px rgba(0,0,0,.45),
+                0 0 26px rgba(56,189,248,.55),
+                inset 0 1px 1px rgba(255,255,255,.5);
+        }
+        .queue-card > * { position: relative; z-index: 1; }
+
+        .queue-number {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #7dd3fc; /* ฟ้าสว่างอ่านออกบนพื้นโปร่ง */
+            text-shadow: 0 0 12px rgba(56,189,248,.6);
+        }
+        .queue-card .text-muted-glass { color: #cbd5e1 !important; }
+        .badge-group {
+            font-size: .8rem;
+            background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+            box-shadow: 0 2px 8px rgba(37,99,235,.5);
+        }
+        .badge-count {
+            background: rgba(255,255,255,.18) !important;
+            color: #e2e8f0;
+            border: 1px solid rgba(255,255,255,.25);
+        }
+        .column-title { border-bottom-color: rgba(56,189,248,.35); }
+        .col-pending .column-title { color: #fbbf24; text-shadow: 0 0 10px rgba(251,191,36,.5); }
+        .col-calling .column-title { color: #38bdf8; text-shadow: 0 0 10px rgba(56,189,248,.6); }
+        .col-served  .column-title { color: #4ade80; text-shadow: 0 0 10px rgba(74,222,128,.5); }
+        .connection-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }
+        .dot-on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+        .dot-off { background: #ef4444; }
+
+        /* ===== ปุ่มลอย มีเงาและแสง ===== */
+        .btn-float {
+            border: none;
+            border-radius: 12px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: .85rem;
+            color: #fff;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+        }
+        /* ยกลอย + เงาเข้มขึ้นตอน hover */
+        .btn-float:hover {
+            transform: translateY(-3px);
+            filter: brightness(1.08);
+        }
+        .btn-float:active { transform: translateY(-1px); }
+
+        /* แสงวิ่งผ่านตอน hover */
+        .btn-float::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -120%;
+            width: 60%;
+            height: 100%;
+            background: linear-gradient(120deg, transparent, rgba(255,255,255,.45), transparent);
+            transform: skewX(-20deg);
+            transition: left .5s ease;
+        }
+        .btn-float:hover::after { left: 140%; }
+
+        /* สีปุ่มแต่ละแบบ + เงาเรืองแสงตามสี */
+        .btn-float-info  { background: linear-gradient(135deg, #38bdf8, #0ea5e9); box-shadow: 0 6px 16px rgba(14,165,233,.45); }
+        .btn-float-green { background: linear-gradient(135deg, #4ade80, #16a34a); box-shadow: 0 6px 16px rgba(22,163,74,.45); }
+        .btn-float-gray  { background: linear-gradient(135deg, #94a3b8, #64748b); box-shadow: 0 6px 16px rgba(100,116,139,.4); }
+
+        /* ปุ่มในส่วนหัว */
+        .header-btn { font-size: .8rem; padding: 8px 14px; }
+    </style>
+</head>
+<body>
+    <div class="board-header d-flex justify-content-between align-items-center">
+        <h4 class="m-0">📋 Staff Dashboard</h4>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- ปุ่มเรียกคิวถัดไปแยกตามกลุ่มโต๊ะ -->
+            <button class="btn-float btn-float-info header-btn" onclick="callNext('A')">เรียกถัดไป A (1-2)</button>
+            <button class="btn-float btn-float-info header-btn" onclick="callNext('B')">เรียกถัดไป B (3-4)</button>
+            <button class="btn-float btn-float-info header-btn" onclick="callNext('C')">เรียกถัดไป C (5+)</button>
+            <span class="ms-3 small">
+                <span id="connDot" class="connection-dot dot-off"></span>
+                <span id="connText">กำลังเชื่อมต่อ...</span>
+            </span>
+        </div>
+    </div>
+
+    <div class="container-fluid p-4">
+        <div class="row g-3">
+            <!-- คอลัมน์ 1: Checking In (Pending) -->
+            <div class="col-md-4">
+                <div class="kanban-column col-pending">
+                    <div class="column-title">
+                        <span>⏳ Checking In</span>
+                        <span class="badge bg-warning text-dark" id="count-pending">0</span>
+                    </div>
+                    <div id="col-pending"></div>
+                </div>
+            </div>
+            <!-- คอลัมน์ 2: Calling -->
+            <div class="col-md-4">
+                <div class="kanban-column col-calling">
+                    <div class="column-title">
+                        <span>📢 Calling</span>
+                        <span class="badge bg-info text-dark" id="count-calling">0</span>
+                    </div>
+                    <div id="col-calling"></div>
+                </div>
+            </div>
+            <!-- คอลัมน์ 3: Seated / Served -->
+            <div class="col-md-4">
+                <div class="kanban-column col-served">
+                    <div class="column-title">
+                        <span>✅ Seated / Served</span>
+                        <span class="badge bg-success" id="count-served">0</span>
+                    </div>
+                    <div id="col-served"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        // --- [ส่วนที่ 3.2] เชื่อมต่อ SignalR ---
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/queueHub")
+            .withAutomaticReconnect()
+            .build();
+
+        // เมื่อได้รับสัญญาณอัปเดต ให้ดึงข้อมูลใหม่อัตโนมัติ (ไม่ต้องกด Refresh)
+        connection.on("ReceiveQueueUpdate", loadQueues);
+
+        connection.start()
+            .then(() => { setConn(true); loadQueues(); })
+            .catch(() => setConn(false));
+
+        connection.onreconnecting(() => setConn(false));
+        connection.onreconnected(() => { setConn(true); loadQueues(); });
+
+        function setConn(ok) {
+            document.getElementById('connDot').className =
+                'connection-dot ' + (ok ? 'dot-on' : 'dot-off');
+            document.getElementById('connText').textContent = ok ? 'เชื่อมต่อแล้ว' : 'ขาดการเชื่อมต่อ';
+        }
+
+        // --- ดึงข้อมูลคิวและ render Kanban ---
+        async function loadQueues() {
+            const res = await fetch('@Url.Action("GetQueues", "Staff")');
+            const queues = await res.json();
+
+            const cols = { 0: [], 1: [], 2: [] };
+            queues.forEach(q => cols[q.status]?.push(q));
+
+            renderColumn('col-pending', cols[0], true);
+            renderColumn('col-calling', cols[1], false);
+            renderColumn('col-served', cols[2], false);
+
+            document.getElementById('count-pending').textContent = cols[0].length;
+            document.getElementById('count-calling').textContent = cols[1].length;
+            document.getElementById('count-served').textContent = cols[2].length;
+        }
+
+        function renderColumn(elId, items, isPending) {
+            const el = document.getElementById(elId);
+            el.innerHTML = items.map(q => cardHtml(q)).join('');
+        }
+
+        function cardHtml(q) {
+            let actions = '';
+            if (q.status === 0) {
+                // Pending → เรียกคิวนี้
+                actions = `<button class="btn-float btn-float-info" onclick="updateStatus(${q.id}, 1)">📢 เรียกคิว</button>`;
+            } else if (q.status === 1) {
+                // Calling → เข้าโต๊ะ / เรียกซ้ำ
+                actions = `
+                    <button class="btn-float btn-float-green" onclick="updateStatus(${q.id}, 2)">✅ เข้าโต๊ะ</button>
+                    <button class="btn-float btn-float-gray" onclick="updateStatus(${q.id}, 1)">🔁 เรียกซ้ำ</button>`;
+            }
+            return `
+                <div class="queue-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="queue-number">${q.queueNumber}</span>
+                        <span class="badge bg-primary badge-group">กลุ่ม ${q.tableGroup}</span>
+                    </div>
+                    <div class="mt-1 fw-semibold">${q.customerName}
+                        <span class="badge badge-count ms-1">${q.customerCount} คน</span>
+                    </div>
+                    <div class="mt-2 d-flex gap-1">${actions}</div>
+                </div>`;
+        }
+
+        // --- เรียกคิวถัดไปตามกลุ่ม ---
+        async function callNext(group) {
+            const res = await fetch('@Url.Action("CallNextQueue", "Staff")?tableGroup=' + group, { method: 'POST' });
+            if (!res.ok) {
+                const d = await res.json();
+                alert(d.message || 'ไม่มีคิวรอ');
+            }
+        }
+
+        // --- เปลี่ยนสถานะคิว ---
+        async function updateStatus(id, status) {
+            await fetch('@Url.Action("UpdateStatus", "Staff")?id=' + id + '&status=' + status, { method: 'POST' });
+        }
+    </script>
+</body>
+</html>

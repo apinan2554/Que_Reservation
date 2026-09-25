@@ -1,0 +1,158 @@
+@model int
+@{
+    ViewData["Title"] = "สถานะคิว";
+    Layout = "_Layout";
+    int queueId = Model;
+}
+
+<style>
+    .status-wrapper {
+        min-height: calc(100vh - 160px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 12px;
+    }
+    .status-card { width: 100%; max-width: 440px; text-align: center; }
+
+    .my-number {
+        font-size: 4.5rem;
+        font-weight: 800;
+        color: #7dd3fc;
+        text-shadow: 0 0 18px rgba(56,189,248,.6);
+        line-height: 1;
+        margin: 6px 0;
+    }
+    .info-line { font-size: 1.05rem; color: #cbd5e1; }
+    .calling-now {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #fde047;
+        text-shadow: 0 0 12px rgba(253,224,71,.5);
+    }
+    .ahead-num { font-size: 2.4rem; font-weight: 800; color: #4ade80; }
+
+    /* สถานะกล่องเมื่อถึงคิวตัวเอง */
+    .my-turn .my-number {
+        color: #fde047;
+        animation: blink 0.8s infinite;
+    }
+    @@keyframes blink {
+        0%, 100% { opacity: 1; text-shadow: 0 0 30px rgba(253,224,71,.9); transform: scale(1.05); }
+        50%      { opacity: .35; text-shadow: none; transform: scale(1); }
+    }
+    .turn-banner {
+        background: linear-gradient(135deg, #16a34a, #22c55e);
+        color: #fff;
+        font-weight: 800;
+        font-size: 1.3rem;
+        border-radius: 14px;
+        padding: 14px;
+        margin-top: 16px;
+        box-shadow: 0 0 24px rgba(34,197,94,.6);
+        animation: pulse 1s infinite;
+    }
+    @@keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.04);} }
+</style>
+
+<div class="status-wrapper">
+    <div class="status-card glass-card" id="statusCard">
+        <div class="text-muted small">หมายเลขคิวของคุณ</div>
+        <div class="my-number" id="myNumber">...</div>
+        <div class="info-line">กลุ่มโต๊ะ <span id="tableGroup">-</span></div>
+
+        <hr style="border-color: rgba(255,255,255,.2);" />
+
+        <div class="info-line">กำลังเรียกคิว</div>
+        <div class="calling-now" id="callingNow">-</div>
+
+        <div class="mt-3 info-line">เหลืออีก</div>
+        <div class="ahead-num" id="aheadCount">-</div>
+        <div class="info-line">คิว ก่อนถึงคุณ</div>
+
+        <!-- แบนเนอร์เมื่อถึงคิว -->
+        <div id="turnBanner" class="turn-banner d-none">🔔 ถึงคิวของคุณแล้ว เชิญที่เคาน์เตอร์</div>
+
+        <!-- ปุ่มเปิดเสียง (ต้องกดก่อนเพื่อปลดล็อกเสียงบนมือถือ) -->
+        <button id="enableSound" class="btn-float btn-float-info mt-3">🔊 เปิดเสียงแจ้งเตือน</button>
+
+        <div class="mt-3">
+            <a class="btn btn-link text-info" asp-controller="Customer" asp-action="Ticket" asp-route-id="@queueId">
+                🖨️ ดู/พิมพ์ตั๋วคิว
+            </a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        const queueId = @queueId;
+        let soundEnabled = false;
+        let alreadyAnnounced = false;
+
+        // ปลดล็อกเสียงเมื่อผู้ใช้กดปุ่ม (นโยบาย autoplay ของเบราว์เซอร์)
+        document.getElementById('enableSound').addEventListener('click', () => {
+            soundEnabled = true;
+            speak('เปิดเสียงแจ้งเตือนแล้ว');
+            document.getElementById('enableSound').classList.add('d-none');
+        });
+
+        // Web Speech API พูดภาษาไทย
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'th-TH';
+            u.rate = 0.9;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+        }
+
+        // อ่านเลขคิวทีละตัว เช่น A001 → "เอ ศูนย์ ศูนย์ หนึ่ง"
+        function spellQueue(qn) {
+            const map = { '0':'ศูนย์','1':'หนึ่ง','2':'สอง','3':'สาม','4':'สี่','5':'ห้า','6':'หก','7':'เจ็ด','8':'แปด','9':'เก้า' };
+            return qn.split('').map(c => map[c] ?? c).join(' ');
+        }
+
+        // --- SignalR: อัปเดตทันทีเมื่อมีการเรียกคิว ---
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/queueHub")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("ReceiveQueueUpdate", loadStatus);
+        connection.on("PlaySoundNotification", loadStatus);
+        connection.start().then(loadStatus);
+
+        // ดึงสถานะคิวของเราและอัปเดตหน้าจอ
+        async function loadStatus() {
+            const res = await fetch('@Url.Action("QueueStatus", "Customer")?id=' + queueId);
+            if (!res.ok) return;
+            const d = await res.json();
+
+            document.getElementById('myNumber').textContent = d.myNumber;
+            document.getElementById('tableGroup').textContent = d.tableGroup;
+            document.getElementById('callingNow').textContent = d.callingNow || '-';
+            document.getElementById('aheadCount').textContent = d.aheadCount;
+
+            const card = document.getElementById('statusCard');
+            const banner = document.getElementById('turnBanner');
+
+            if (d.isMyTurn) {
+                // ถึงคิวเรา: กระพริบ + แบนเนอร์ + เสียง (ครั้งเดียว)
+                card.classList.add('my-turn');
+                banner.classList.remove('d-none');
+                if (!alreadyAnnounced) {
+                    alreadyAnnounced = true;
+                    if (soundEnabled) {
+                        speak(`ถึงคิวของคุณแล้ว ขอเชิญคิวหมายเลข ${spellQueue(d.myNumber)} ค่ะ`);
+                    }
+                }
+            } else {
+                card.classList.remove('my-turn');
+                banner.classList.add('d-none');
+                alreadyAnnounced = false;
+            }
+        }
+    </script>
+}
