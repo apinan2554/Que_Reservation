@@ -94,9 +94,11 @@
         // มาจาก QR หรือไม่ (กำหนดจาก server ผ่าน ViewBag.RequireGps)
         const fromQr = @(ViewBag.RequireGps == true ? "true" : "false");
 
-        // --- [ส่วนที่ 2.3 - Frontend] ขอพิกัด GPS เฉพาะเมื่อมาจาก QR ---
+        // --- [ส่วนที่ 2.3 - Frontend] ขอพิกัด GPS เฉพาะเมื่อระบบเปิดบังคับ GPS จริง ---
+        // ควบคุมจาก server (StoreSettings.EnableGeoCheck) ถ้าปิดอยู่จะไม่ขอ GPS เลย
+        const requireGps = fromQr && @(ViewBag.EnableGeoCheck == true ? "true" : "false");
         const geoStatus = document.getElementById('geoStatus');
-        if (fromQr) {
+        if (requireGps) {
             geoStatus.classList.remove('d-none');
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(

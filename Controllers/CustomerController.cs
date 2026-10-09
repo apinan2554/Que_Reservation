@@ -33,8 +33,9 @@ namespace Reservation_Que.Controllers
         /// </summary>
         public IActionResult Register(string? src)
         {
-            // ส่งไปให้ View รู้ว่าต้องบังคับ GPS หรือไม่
+            // ส่งไปให้ View รู้ว่ามาจาก QR หรือไม่ และระบบเปิดบังคับ GPS หรือไม่
             ViewBag.RequireGps = src == "qr";
+            ViewBag.EnableGeoCheck = _store.EnableGeoCheck;
             return View();
         }
 
