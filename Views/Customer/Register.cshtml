@@ -54,13 +54,22 @@
                 <div class="form-text">กลุ่มโต๊ะ: A = 1-2 คน, B = 3-4 คน, C = 5+ คน</div>
             </div>
 
-            <div id="geoStatus" class="alert alert-secondary py-2 small mb-3 rounded-4 d-none">
-                📍 กำลังตรวจสอบตำแหน่ง...
+        <!-- 📍 GPS Status Box: แสดงตลอดเวลาที่รอ GPS -->
+        <div id="geoBox" class="rounded-4 p-3 mb-3 d-none" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span id="geoIcon" style="font-size:1.4rem;">📍</span>
+                <strong id="geoTitle" style="font-size:.95rem;">กำลังค้นหาตำแหน่ง...</strong>
             </div>
-
-            <button type="submit" class="btn-float btn-float-primary btn-pin" id="submitBtn">
-                รับคิว
+            <div id="geoDesc" class="small" style="color:#cbd5e1;"></div>
+            <button id="geoRetryBtn" class="btn-float btn-float-info mt-2 small d-none"
+                    style="padding:6px 14px;font-size:.8rem;" onclick="requestGps()">
+                🔄 ขอตำแหน่งใหม่
             </button>
+        </div>
+
+        <button type="submit" class="btn-float btn-float-primary btn-pin" id="submitBtn">
+            รับคิว
+        </button>
         </form>
 
         <div id="errorBox" class="alert alert-danger mt-3 d-none rounded-4"></div>
@@ -70,56 +79,112 @@
 @section Scripts {
     <script>
         let currentPosition = null;
+        let gpsWatchId = null;
 
-        // --- [ข] ดึงค่าตั้งเวลาต่อโต๊ะมาแสดงให้ลูกค้าทราบ ---
+        // --- ดึงค่าตั้งเวลาต่อโต๊ะมาแสดงให้ลูกค้าทราบ ---
         (async () => {
             try {
                 const res = await fetch('@Url.Action("GetTableSettings", "Settings")');
                 const settings = await res.json();
                 if (!settings.length) return;
-
-                // แปลงนาทีเป็นข้อความ ชม./นาที เช่น 90 → "1 ชม. 30 นาที"
                 const fmt = (m) => {
                     const h = Math.floor(m / 60), min = m % 60;
-                    return (h ? h + ' ชม. ' : '') + (min ? min + ' นาที' : '') || '0 นาที';
+                    return (h ? h + ' ชม. ' : '') + (min ? min + ' นาที' : '');
                 };
-
                 const parts = settings.map(s => `กลุ่ม ${s.tableGroup} (${s.description}) ไม่เกิน ${fmt(s.maxMinutes)}`);
-                document.getElementById('timeLimitText').innerHTML =
-                    'จำกัดเวลานั่งต่อโต๊ะ<br>' + parts.join('<br>');
+                document.getElementById('timeLimitText').innerHTML = 'จำกัดเวลานั่งต่อโต๊ะ<br>' + parts.join('<br>');
                 document.getElementById('timeLimitBox').classList.remove('d-none');
-            } catch { /* ไม่แสดงถ้าดึงค่าไม่ได้ */ }
+            } catch {}
         })();
 
-        // มาจาก QR หรือไม่ (กำหนดจาก server ผ่าน ViewBag.RequireGps)
+        // ค่าจาก server: มาจาก QR ไหม และเปิด GPS check ไหม
         const fromQr = @(ViewBag.RequireGps == true ? "true" : "false");
-
-        // --- [ส่วนที่ 2.3 - Frontend] ขอพิกัด GPS เฉพาะเมื่อระบบเปิดบังคับ GPS จริง ---
-        // ควบคุมจาก server (StoreSettings.EnableGeoCheck) ถ้าปิดอยู่จะไม่ขอ GPS เลย
         const requireGps = fromQr && @(ViewBag.EnableGeoCheck == true ? "true" : "false");
-        const geoStatus = document.getElementById('geoStatus');
-        if (requireGps) {
-            geoStatus.classList.remove('d-none');
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        currentPosition = {
-                            latitude: pos.coords.latitude,
-                            longitude: pos.coords.longitude
-                        };
-                        geoStatus.className = 'alert alert-success py-2 small mb-3 rounded-4';
-                        geoStatus.textContent = '✅ ตรวจสอบตำแหน่งเรียบร้อย';
-                    },
-                    (err) => {
-                        geoStatus.className = 'alert alert-warning py-2 small mb-3 rounded-4';
-                        geoStatus.textContent = '⚠️ ไม่สามารถเข้าถึงตำแหน่งได้ กรุณาอนุญาตการใช้ GPS';
-                    },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                );
-            } else {
-                geoStatus.classList.remove('d-none');
-                geoStatus.textContent = '❌ เบราว์เซอร์ไม่รองรับ GPS';
+
+        const submitBtn = document.getElementById('submitBtn');
+        const geoBox = document.getElementById('geoBox');
+        const geoIcon = document.getElementById('geoIcon');
+        const geoTitle = document.getElementById('geoTitle');
+        const geoDesc = document.getElementById('geoDesc');
+        const geoRetry = document.getElementById('geoRetryBtn');
+
+        // --- ปรับสถานะ UI ของ GPS box ---
+        function setGeo(icon, title, desc, locked, showRetry) {
+            geoBox.classList.remove('d-none');
+            geoIcon.textContent = icon;
+            geoTitle.textContent = title;
+            geoDesc.textContent = desc;
+            submitBtn.disabled = locked;
+            submitBtn.textContent = locked ? '⏳ รอตรวจสอบตำแหน่ง...' : '✅ รับคิว';
+            showRetry ? geoRetry.classList.remove('d-none') : geoRetry.classList.add('d-none');
+        }
+
+        // --- ขอ GPS และคอยจนกว่าจะได้พิกัด ---
+        function requestGps() {
+            if (!navigator.geolocation) {
+                setGeo('❌', 'เบราว์เซอร์ไม่รองรับ GPS',
+                    'กรุณาใช้ Chrome หรือ Safari เวอร์ชันใหม่', true, false);
+                return;
             }
+
+            setGeo('📍', 'กำลังค้นหาตำแหน่ง...',
+                'กรุณากด "อนุญาต" เมื่อเบราว์เซอร์ขอเข้าถึงตำแหน่ง', true, false);
+
+            // หยุด watch เก่าก่อน (ถ้ามี)
+            if (gpsWatchId !== null) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+            }
+
+            // watchPosition จะวนหาพิกัดซ้ำจนกว่าจะได้ แล้วหยุดเอง
+            gpsWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    // ✅ ได้พิกัดแล้ว
+                    currentPosition = {
+                        latitude: pos.coords.latitude,
+                        longitude: pos.coords.longitude
+                    };
+                    const acc = pos.coords.accuracy ? `(ความแม่นยำ ~${Math.round(pos.coords.accuracy)} ม.)` : '';
+                    setGeo('✅', 'ตรวจสอบตำแหน่งเรียบร้อย',
+                        `พร้อมจองคิวแล้ว ${acc}`, false, false);
+
+                    // หยุด watch ประหยัดแบตเมื่อได้พิกัดแล้ว
+                    navigator.geolocation.clearWatch(gpsWatchId);
+                    gpsWatchId = null;
+                },
+                (err) => {
+                    currentPosition = null;
+                    if (err.code === 1) { // PERMISSION_DENIED
+                        setGeo('🔒', 'ไม่ได้รับอนุญาตเข้าถึง GPS',
+                            'กรุณาไปที่การตั้งค่าเบราว์เซอร์ → อนุญาตการเข้าถึงตำแหน่ง แล้วกด "ขอตำแหน่งใหม่"',
+                            true, true);
+                    } else if (err.code === 2) { // POSITION_UNAVAILABLE
+                        setGeo('⚠️', 'ไม่พบสัญญาณ GPS',
+                            'กรุณาเปิด Location ที่การตั้งค่าเครื่อง และออกไปยืนในที่โล่ง แล้วกด "ขอตำแหน่งใหม่"',
+                            true, true);
+                    } else { // TIMEOUT
+                        setGeo('⏰', 'ค้นหาตำแหน่งนานเกินไป',
+                            'กำลังลองใหม่อัตโนมัติ กรุณาออกไปยืนในที่โล่งเพื่อรับสัญญาณดีขึ้น',
+                            true, true);
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 20000,  // รอ GPS นาน 20 วินาทีต่อครั้ง
+                    maximumAge: 0    // ไม่ใช้พิกัดเก่าจาก cache
+                }
+            );
+        }
+
+        // --- เริ่มทำงาน ---
+        if (requireGps) {
+            // บังคับขอ GPS ทันทีที่หน้าโหลด (เฉพาะมาจาก QR + เปิด EnableGeoCheck)
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ รอตรวจสอบตำแหน่ง...';
+            requestGps();
+        } else {
+            // มาจากเมนู หรือปิด GPS check → เปิดปุ่มทันที
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'รับคิว';
         }
 
         // --- ส่งฟอร์มรับคิว ---
@@ -145,13 +210,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
                 const data = await res.json();
-                if (!res.ok) {
-                    throw new Error(data.message || 'เกิดข้อผิดพลาด');
-                }
-
-                // ไปหน้าติดตามสถานะคิว (real-time)
+                if (!res.ok) throw new Error(data.message || 'เกิดข้อผิดพลาด');
                 window.location.href = '@Url.Action("Status", "Customer")/' + data.id;
             } catch (ex) {
                 errorBox.textContent = ex.message;
