@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: que-reservation
+    runtime: dotnet
+    plan: free
+    region: oregon
+    buildCommand: dotnet publish Reservation_Que.csproj -c Release -o out
+    startCommand: dotnet out/Reservation_Que.dll
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: DOTNET_VERSION
+        value: "6.0"
