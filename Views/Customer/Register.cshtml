@@ -67,8 +67,9 @@
             </button>
         </div>
 
-        <button type="submit" class="btn-float btn-float-primary btn-pin" id="submitBtn">
-            รับคิว
+        <button type="submit" class="btn-float btn-float-primary btn-pin"
+                id="submitBtn" @(ViewBag.RequireGps == true ? "disabled" : "")>
+            @(ViewBag.RequireGps == true ? "⏳ รอตรวจสอบตำแหน่ง..." : "รับคิว")
         </button>
         </form>
 
@@ -193,6 +194,13 @@
             const btn = document.getElementById('submitBtn');
             const errorBox = document.getElementById('errorBox');
             errorBox.classList.add('d-none');
+
+            // ป้องกันชั้นที่ 2: ถ้า requireGps แต่ยังไม่มีพิกัด → ห้ามส่งเด็ดขาด
+            if (requireGps && !currentPosition) {
+                errorBox.textContent = '📍 กรุณารอให้ระบบตรวจสอบตำแหน่งให้เสร็จก่อน หรือกด "ขอตำแหน่งใหม่"';
+                errorBox.classList.remove('d-none');
+                return;
+            }
             btn.disabled = true;
             btn.textContent = 'กำลังส่ง...';
 
