@@ -18,7 +18,12 @@ namespace Reservation_Que.Controllers
             var forwardedProto = Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
             if (!string.IsNullOrEmpty(forwardedProto))
                 return forwardedProto;
-            // fallback: ใช้ Request.Scheme ปกติ (local dev = http)
+
+            // ถ้าเป็น Production environment บน cloud ให้บังคับเป็น https เสมอ
+            if (!Request.Host.Host.Contains("localhost") && !Request.Host.Host.Contains("127.0.0.1"))
+                return "https";
+
+            // fallback: local dev
             return Request.Scheme;
         }
 

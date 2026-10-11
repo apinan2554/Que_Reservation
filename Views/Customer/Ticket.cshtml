@@ -70,8 +70,10 @@
     <script>
         const queueId = @queueId;
 
-        // URL หน้าติดตามสถานะคิวนี้ (absolute) สร้างจาก server ตาม host ปัจจุบัน
-        const statusUrl = '@Html.Raw(Url.Action("Status", "Customer", new { id = queueId }, Context.Request.Scheme))';
+        // URL หน้าติดตามสถานะคิวนี้ (absolute) — บังคับ https บน production
+        const host = window.location.host;
+        const scheme = (window.location.protocol === 'https:' || (!host.includes('localhost') && !host.includes('127.0.0.1'))) ? 'https' : 'http';
+        const statusUrl = scheme + '://' + host + '@Url.Action("Status", "Customer", new { id = queueId })';
         // ชี้ img ไปที่ QrController.Image เพื่อเจน QR ของ statusUrl
         document.getElementById('tQr').src =
             '@Url.Action("Image", "Qr")?url=' + encodeURIComponent(statusUrl);
